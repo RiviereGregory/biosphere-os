@@ -1,0 +1,8 @@
+# .gitignore
+*.hex
+*.elf
+*.o
+.DS_Store
+target/
+dist/
+node_modules/
