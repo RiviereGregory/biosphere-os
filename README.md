@@ -110,3 +110,110 @@ T:23.7|H:55.0|S:69
 
 ```
 
+## 📅 Journal de Bord — Étape 2 : Le Daemon d'Ingestion (Backend V1)  
+
+L'objectif de la **Semaine 2** est de substituer la lecture manuelle du port série (`cat /dev/ttyACM0`) par un service d'arrière-plan autonome et résilient développé en **Java 21 / Spring Boot 3**.  
+
+Le défi architectural principal consiste à lire un flux d'Entrées/Sorties (I/O) matériellement bloquant sans gaspiller de ressources système, en déléguant l'écoute du noyau Linux à un **Virtual Thread** (Projet Loom).  
+
+---
+
+## 🛠️ Architecture Logicielle & Choix Techniques  
+
+* **Langage & Framework :** Java 21 LTS / Spring Boot 3.3+ (Gestion de projet : *Maven Wrapper*)  
+* **Driver Matériel :** `com.fazecast:jSerialComm` v2.10+ (Pont JNI natif vers le noyau Linux)  
+* **Modèle de Concurrence :** Virtual Threads activés globalement (`spring.threads.virtual.enabled=true`)  
+
+```
+[ ARDUINO UNO ] ─── (Flux UART : /dev/ttyACM0) ───> [ NOYAU LINUX / UBUNTU ]
+│
+(Driver JNI jSerialComm)
+▼
+[ SPRING BOOT (Java 21) ]
+└── Virtual Thread (Loom)
+└── TelemetryParserService
+```
+
+---
+
+## ⚙️ Procédure d'Initialisation (Environnement Vierge Linux)
+
+### Prérequis Système (Ubuntu)
+Le script `./mvnw` embarque son propre moteur Maven, mais nécessite impérativement la présence du compilateur Java 21 sur le système hôte.
+
+```bash
+# 1. Mise à jour des dépôts système
+sudo apt update
+
+# 2. Installation du Kit de Développement Java 21 (JDK complet)
+sudo apt install openjdk-21-jdk -y
+
+# 3. Vérification de la liaison
+java -version
+```
+
+Génération du Projet (CLI / cURL)  
+
+Depuis la racine du dépôt Git (~/biosphere-os/) :  
+```Bash
+
+mkdir -p backend && cd backend
+
+# Téléchargement du squelette Spring Boot via l'API Spring Initializr
+curl [https://start.spring.io/starter.tgz](https://start.spring.io/starter.tgz) \
+  -d dependencies=web \
+  -d type=maven-project \
+  -d language=java \
+  -d baseDir=. \
+  -d groupId=com.biosphere \
+  -d artifactId=biosphere-backend \
+  -d name=biosphere-backend \
+  -d packageName=com.biosphere.backend \
+  -d javaVersion=21 | tar -xzvf -
+
+```
+
+🔧 Configuration des Dépendances & Propriétés  
+1. Ajout du pilote série (pom.xml)  
+
+Intégration de la librairie industrielle au sein de la balise <dependencies> :  
+```XML
+
+<dependency>
+    <groupId>com.fazecast</groupId>
+    <artifactId>jSerialComm</artifactId>
+    <version>2.10.4</version>
+</dependency>
+```
+
+2. Configuration du Serveur (application.properties)
+
+Activation des threads légers managés par la JVM :  
+```Properties
+
+spring.application.name=biosphere-backend
+spring.threads.virtual.enabled=true
+server.port=8080
+```
+
+⚠️ Résolution des Problèmes Système (Troubleshooting Linux)  
+
+    Perte des droits d'exécution sur le Wrapper Maven :  
+```Bash
+
+chmod +x mvnw
+
+```
+
+    Contournement de la sécurité noexec (Spécificité disques externes/secondaires) :  
+    Si le projet réside sur une partition montée dans /run/media/..., le noyau Ubuntu peut bloquer l'exécution directe de binaires. La compilation doit être déléguée à l'interpréteur système :  
+```Bash
+
+bash mvnw clean compile
+```
+
+🧪 Statut de Validation
+
+    Compilation initiale : OK (BUILD SUCCESS généré via bash mvnw)
+
+    Téléchargement des dépendances JNI Linux : Validé dans le cache local (~/.m2/repository)
