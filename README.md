@@ -254,3 +254,93 @@ public record PlantTelemetry(
 ```
 
 Note technique : On observe un intervalle d'exécution strict de 2000ms (+/- 3ms de latence noyau) sur le thread [arduino-vthread].  
+
+## 📅 Journal de Bord — Étape 3 : Persistance PostgreSQL et Ouverture Wi-Fi (ESP32)
+
+L'objectif de cette semaine était de consolider les données en base 
+(via PostgreSQL sous Docker) et de préparer la transition du projet 
+vers une architecture IoT sans-fil (Wi-Fi via ESP32), tout en conservant 
+la rétrocompatibilité avec la sonde filaire USB actuelle.  
+
+---
+
+### 🛠️ Infrastructure : Docker & PostgreSQL  
+
+Pour éviter d'installer des services lourds sur l'OS, 
+la base de données est isolée dans un conteneur :
+
+```bash
+# Déploiement de PostgreSQL via Docker
+docker run --name biosphere-db \
+  -e POSTGRES_USER=greg \
+  -e POSTGRES_PASSWORD=secret \
+  -e POSTGRES_DB=biospheredb \
+  -p 5432:5432 \
+  -d postgres:15-alpine
+```
+
+#### 🏗️ Architecture Logicielle : Séparation des Responsabilités (Clean Architecture)  
+
+Pour anticiper l'arrivée de données sous différents formats (Série vs JSON), 
+le projet adopte une séparation stricte des modèles de données :  
+
+    Couche Métier (Domaine) : PlantTelemetry (Record). C'est l'objet universel et agnostique qui circule au cœur de l'application.
+
+    Couche Infrastructure (DAO) : TelemetryEntity (@Entity JPA). Représentation miroir de la table PostgreSQL.
+
+    Couche Présentation (DTO) : TelemetryPayload (Record). Représentation du payload JSON attendu de l'ESP32.
+
+#### ⚙️ Implémentation de la Persistance (JPA)
+1. Entité et Repository  
+
+Création de l'interface TelemetryRepository (héritant de JpaRepository) et 
+de l'entité TelemetryEntity pour déléguer la génération SQL à Hibernate.  
+2. Service d'Ingestion Centralisé  
+
+Création du TelemetryIngestService. Son rôle est de :  
+
+    Recevoir un objet métier pur (PlantTelemetry).
+
+    Le convertir en objet d'infrastructure (TelemetryEntity).
+
+    Y apposer un tag d'origine (USB ou WIFI).
+
+    Déclencher la sauvegarde via le Repository.
+
+#### 📡 Implémentation du Contrôleur REST (Préparation ESP32)
+
+Ouverture d'un endpoint POST /api/telemetry pour ingérer les requêtes JSON en provenance 
+du futur microcontrôleur ESP32 :
+```Java
+@PostMapping("/telemetry")
+public ResponseEntity<String> receiveWifiTelemetry(@RequestBody TelemetryPayload payload) {
+    // 1. Conversion du DTO réseau en objet Métier
+    PlantTelemetry telemetry = new PlantTelemetry(
+        payload.temperature(), 
+        payload.humidity(), 
+        payload.soil(), 
+        LocalDateTime.now()
+    );
+    
+    // 2. Délégation au service centralisé (Tag WIFI)
+    ingestService.ingest(telemetry, "WIFI");
+    
+    return ResponseEntity.ok("OK");
+}
+```
+
+#### 🧪 Validation et Tests (Preuve de Fonctionnement)
+
+Test de charge hybride : Injection de données simulées par API (via cURL) tout en maintenant l'Arduino connecté.
+
+Extrait des logs JVM démontrant la concurrence parfaite :
+Plaintext
+
+2026-07-04T16:49:34.801 INFO --- [arduino-vthread] : 💾 [Sauvegarde BDD] -> Origine: USB  | Temp: 23.2°C
+2026-07-04T16:49:35.833 INFO --- [omcat-handler-0] : 💾 [Sauvegarde BDD] -> Origine: WIFI | Temp: 25.4°C
+2026-07-04T16:49:36.809 INFO --- [arduino-vthread] : 💾 [Sauvegarde BDD] -> Origine: USB  | Temp: 23.7°C
+2026-07-04T16:49:41.407 INFO --- [omcat-handler-1] : 💾 [Sauvegarde BDD] -> Origine: WIFI | Temp: 26.4°C
+
+Note technique : Le thread virtuel [arduino-vthread] (I/O matériel) et 
+le pool de threads Tomcat [omcat-handler-X] (Requêtes HTTP) coexistent et 
+écrivent dans la base de données sans conflit (gestion des locks par HikariCP).

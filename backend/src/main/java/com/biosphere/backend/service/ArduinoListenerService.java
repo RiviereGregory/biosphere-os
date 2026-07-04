@@ -1,6 +1,5 @@
 package com.biosphere.backend.service;
 
-import com.biosphere.backend.domain.PlantTelemetry;
 import com.fazecast.jSerialComm.SerialPort;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -16,7 +15,13 @@ import java.time.LocalDateTime;
 public class ArduinoListenerService {
 
     private static final Logger log = LoggerFactory.getLogger(ArduinoListenerService.class);
+    private final TelemetryIngestService ingestService;
     private SerialPort activePort;
+
+    public ArduinoListenerService(TelemetryIngestService ingestService) {
+        this.ingestService = ingestService;
+    }
+
 
     @PostConstruct
     public void startListening() {
@@ -53,36 +58,16 @@ public class ArduinoListenerService {
 
         log.info("✅ Liaison série établie ! Lancement du Virtual Thread Loom...");
 
-        // 2. Lancement du Thread Virtuel léger managé par la JVM
         Thread.ofVirtual().name("arduino-vthread").start(() -> {
             try (var reader = new BufferedReader(new InputStreamReader(activePort.getInputStream()))) {
                 String rawLine;
                 while ((rawLine = reader.readLine()) != null) {
-                    processIncomingLine(rawLine);
+                    ingestService.ingestRawSerialLine(rawLine);
                 }
             } catch (Exception e) {
                 log.error("💥 Déconnexion critique du flux USB", e);
             }
         });
-    }
-
-    private void processIncomingLine(final String rawLine) {
-        // Trame attendue : "T:22.5|H:55.0|S:66"
-        try {
-            String[] parts = rawLine.trim().split("\\|");
-            float temp = Float.parseFloat(parts[0].split(":")[1]);
-            float hum  = Float.parseFloat(parts[1].split(":")[1]);
-            int soil   = Integer.parseInt(parts[2].split(":")[1]);
-
-            PlantTelemetry telemetry = new PlantTelemetry(temp, hum, soil, LocalDateTime.now());
-
-            // C'est ici qu'à la Semaine 3 nous appellerons le Repository PostgreSQL !
-            log.info("🌿 [Télémétrie Reçue] -> {}", telemetry);
-
-        } catch (Exception e) {
-            // Rejet silencieux des trames incomplètes lors du branchement à chaud
-            log.debug("Trame ignorée (corrompue) : {}", rawLine);
-        }
     }
 
     @PreDestroy
