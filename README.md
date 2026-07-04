@@ -278,6 +278,33 @@ docker run --name biosphere-db \
   -p 5432:5432 \
   -d postgres:15-alpine
 ```
+Pour avoir un volume sur le disque physique et garder les données même si l'image est supprimer.  
+1. On arrête le conteneur actuel
+```bash
+docker stop biosphere-db
+```
+
+2. On le supprime (⚠️ Cela va effacer tes données de test actuelles, mais c'est le moment de le faire !)
+```bash
+docker rm biosphere-db
+```
+
+3. On crée un volume virtuel géré par Linux  
+```bash
+docker volume create biosphere_pgdata
+```
+
+4. On relance la commande magique EN AJOUTANT le volume (-v)
+```bash
+docker run --name biosphere-db \
+-e POSTGRES_USER=greg \
+-e POSTGRES_PASSWORD=secret \
+-e POSTGRES_DB=biospheredb \
+-p 5432:5432 \
+-v biosphere_pgdata:/var/lib/postgresql/data \
+-d postgres:15-alpine
+```
+
 
 #### 🏗️ Architecture Logicielle : Séparation des Responsabilités (Clean Architecture)  
 
@@ -344,3 +371,39 @@ Plaintext
 Note technique : Le thread virtuel [arduino-vthread] (I/O matériel) et 
 le pool de threads Tomcat [omcat-handler-X] (Requêtes HTTP) coexistent et 
 écrivent dans la base de données sans conflit (gestion des locks par HikariCP).
+
+Pour vérifier les données en BDD :  
+1. Comment vérifier l'état du conteneur (Niveau Docker)Pour savoir 
+si ton serveur de base de données tourne, ouvre ton terminal Linux et tape :
+```Bash
+# Voir les conteneurs actuellement en cours d'exécution
+   docker ps
+
+# Voir TOUS les conteneurs (même ceux qui sont éteints)
+docker ps -a
+```
+
+Si tu as besoin de voir les erreurs internes de PostgreSQL (par exemple si la base refuse de démarrer) :
+```Bash
+docker logs biosphere-db
+```
+
+2. Comment vérifier l'état des données (Niveau SQL)
+Tu n'as pas besoin d'installer un gros logiciel client SQL sur ton Ubuntu. 
+Tu peux demander à Docker d'exécuter la commande psql (le terminal de PostgreSQL) directement à l'intérieur de ton conteneur :
+```Bash
+docker exec -it biosphere-db psql -U greg -d biospheredb
+```
+(Ton terminal va changer et afficher biospheredb=# : tu es maintenant connecté à la base !)  
+Essaie ces commandes SQL :  
+```
+\dt -> Affiche la liste des tables (tu vas voir telemetry_history).  
+
+SELECT * FROM telemetry_history ORDER BY timestamp DESC LIMIT 5; -> Affiche les 5 dernières lignes ingérées.
+  
+\q -> Pour quitter et revenir à ton terminal Linux.  
+```
+
+(💡 Astuce Pro : Puisque tu utilises IntelliJ, tu peux aussi cliquer sur l'onglet Database à droite de ton écran, 
+ajouter une source de données "PostgreSQL", mettre localhost, le port 5432, user greg, pass secret, db biospheredb. 
+Tu auras une interface graphique pour explorer tes tables !)
