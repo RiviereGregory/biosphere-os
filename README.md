@@ -568,3 +568,37 @@ Résolution :
 2. Réattribution des droits de propriété stricts au niveau de l'OS (sudo chown -R $USER:$USER ...).
 3. Initialisation réussie de l'architecture Single Page Application (SPA).
 
+## 📅 Journal de Bord — Étape 4.2 : Le Pont HTTP (PostgreSQL -> Spring Boot -> Angular)
+
+Établissement de la communication bidirectionnelle entre la Single Page Application (Angular 17+) et l'API REST (Spring Boot), avec récupération de l'historique de télémétrie.
+
+---
+
+### ⚙️ Évolution du Backend (API de Lecture)
+
+Pour exposer les données stockées en base au frontend, la couche de persistance et le contrôleur ont été mis à jour :
+
+1.  **Repository (Spring Data JPA) :** Ajout d'une méthode de requête dérivée pour extraire le dernier lot de données sans écrire de SQL manuel :
+    ```java
+    List<TelemetryEntity> findTop15ByOrderByTimestampDesc();
+    ```
+2.  **Contrôleur REST :** Création du point d'entrée `GET /api/telemetry` exposant l'historique au format JSON.
+
+---
+
+### 🛠️ Implémentation Frontend (Angular 17+)
+
+Adoption des standards modernes du framework (zéro `NgModule`) pour l'architecture des requêtes :
+
+1.  **Activation Globale :** Injection du client HTTP au niveau du bootstrap de l'application via `provideHttpClient()` dans `app.config.ts`.
+2.  **Service Métier (`BiosphereService`) :** * Définition de l'interface stricte `Telemetry` (miroir du DTO Java).
+    * Utilisation de la nouvelle fonction `inject(HttpClient)` remplaçant l'injection par constructeur.
+    * Implémentation des méthodes réactives (retournant des `Observable`) pour la lecture (`GET`) et l'écriture (`POST` vers l'actionneur).
+
+---
+
+### 🧪 Preuve de Fonctionnement (End-to-End)
+
+**Validation de la chaîne complète (Capteur -> BDD -> Navigateur) :**
+Appel du service dès l'initialisation du composant racine (`ngOnInit`). La console du navigateur (Outils de développement) confirme la réception et le parsing correct du payload JSON provenant de PostgreSQL :
+`✅ Données reçues de PostgreSQL : Array(15) [ Object { temperature: 19, humidity: 55, ... }, ... ]`
