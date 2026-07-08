@@ -406,4 +406,80 @@ SELECT * FROM telemetry_history ORDER BY timestamp DESC LIMIT 5; -> Affiche les 
 
 (💡 Astuce Pro : Puisque tu utilises IntelliJ, tu peux aussi cliquer sur l'onglet Database à droite de ton écran, 
 ajouter une source de données "PostgreSQL", mettre localhost, le port 5432, user greg, pass secret, db biospheredb. 
-Tu auras une interface graphique pour explorer tes tables !)
+Tu auras une interface graphique pour explorer tes tables !)  
+
+## 📅 Journal de Bord — Étape 3 (Fin) : Actionneurs et Flux Bidirectionnel (Downlink)
+
+Mise en place de la capacité du serveur à interagir avec le monde physique (contrôle d'actionneurs) via l'exposition 
+d'une API REST, tout en gérant l'accès concurrent au port série matériel.
+
+---
+
+### ⚙️ Implémentation Backend (Java / Spring Boot)
+
+#### 1. Canal d'Écriture Matériel (`ArduinoListenerService`)
+Ajout de la capacité d'écriture non-bloquante vers le microcontrôleur via l'implémentation d'une méthode de transmission 
+binaire (`OutputStream`) ajoutant automatiquement le caractère de fin de ligne `\n` requis par le parseur C++.
+
+#### 2. Contrôleur REST (`ActuatorController`)
+Exposition du point d'entrée réseau permettant à une interface frontend de déclencher une action physique :
+* **Route :** `POST /api/actuators/led?state={true|false}`
+* **Routage :** Traduction du booléen réseau en commande matérielle brute (`CMD:LED:ON` ou `CMD:LED:OFF`).
+
+---
+
+### 🛠️ Implémentation Embarquée (C++ / Arduino)
+
+Mise à jour du firmware (`biosphere_firmware.ino`) pour intégrer une écoute asynchrone :
+* Utilisation stricte de `Serial.available() > 0` pour éviter de bloquer la boucle principale (`loop`).
+* Extraction de la commande via `Serial.readStringUntil('\n')` et nettoyage du buffer.
+* Bascule d'état matérielle sur la broche numérique intégrée (`LED_BUILTIN`).
+
+---
+
+### ⚠️ Résolution de Problème : Le Verrou Matériel (Hardware Lock)
+
+**Symptôme :** Échec de la commande `arduino-cli upload` avec l'erreur "Permission denied" ou "Port busy" sur `/dev/ttyACM0`.
+**Analyse technique :** Sous Linux, l'accès à un descripteur de périphérique (`/dev/tty*`) est généralement exclusif. 
+Le service Spring Boot (via la librairie JNI `jSerialComm`) maintient un verrou (lock) sur le fichier matériel tant que le serveur est actif.
+**Solution (Procédure de Flashage) :**
+1. Interruption du daemon Java (`Ctrl+C` sur le serveur Spring Boot).
+2. Téléversement du nouveau firmware via `arduino-cli`.
+3. Redémarrage du serveur Java.
+
+---
+### 🚀 Le Test de Vérité (Full-Stack Hardware)
+
+    Regarde physiquement ta carte Arduino. La LED "L" (près du pin 13) doit être éteinte.
+
+    Ouvre un terminal Linux et envoie une requête POST à ton API locale pour allumer la LED :
+
+```Bash
+curl -X POST "http://localhost:8080/api/actuators/led?state=true"
+```
+        Dans la console IntelliJ, tu verras les logs du Controller et du Service Série.
+
+        Sur ton bureau, la LED de l'Arduino va s'allumer instantanément !
+
+Pour l'éteindre :  
+
+```Bash
+curl -X POST "http://localhost:8080/api/actuators/led?state=false"
+```
+
+
+---
+
+### 🧪 Preuve de Fonctionnement (Trace Console)
+
+Entrelacement réussi des requêtes HTTP synchrones et de la télémétrie asynchrone :
+
+```text
+2026-07-08T18:25:54.249 INFO [arduino-vthread] : 💾 [Sauvegarde BDD] -> Origine: USB | Temp: 22.8°C
+2026-07-08T18:25:55.856 INFO [omcat-handler-0] : 🕹️ [API REST] Demande de modification d'état reçue : LED -> ON
+2026-07-08T18:25:55.857 INFO [omcat-handler-0] : 📤 [Commande envoyée au matériel] -> CMD:LED:ON
+2026-07-08T18:25:56.256 INFO [arduino-vthread] : 💾 [Sauvegarde BDD] -> Origine: USB | Temp: 23.1°C
+[...]
+2026-07-08T18:26:08.887 INFO [omcat-handler-1] : 🕹️ [API REST] Demande de modification d'état reçue : LED -> OFF
+2026-07-08T18:26:08.888 INFO [omcat-handler-1] : 📤 [Commande envoyée au matériel] -> CMD:LED:OFF
+2026-07-08T18:26:10.264 INFO [arduino-vthread] : 💾 [Sauvegarde BDD] -> Origine: USB | Temp: 24.5°C

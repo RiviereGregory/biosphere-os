@@ -70,6 +70,19 @@ public class ArduinoListenerService {
         });
     }
 
+    // Méthode pour envoyer une commande brute au microcontrôleur
+    public void sendCommand(String command) {
+        if (activePort != null && activePort.isOpen()) {
+            // Ajout du caractère de fin de ligne indispensable pour le C++
+            String formattedCommand = command + "\n";
+            byte[] bytes = formattedCommand.getBytes();
+            activePort.writeBytes(bytes, bytes.length);
+            log.info("📤 [Commande envoyée au matériel] -> {}", command);
+        } else {
+            log.error("❌ Impossible d'envoyer la commande, port série fermé ou inactif.");
+        }
+    }
+
     @PreDestroy
     public void shutdown() {
         if (activePort != null && activePort.isOpen()) {

@@ -14,9 +14,30 @@ int mockSoil = 65; // % d'humidité du sol
 
 void setup() {
     Serial.begin(9600); // Vitesse standard et fiable
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, LOW); // Éteinte par défaut
 }
 
 void loop() {
+    // ---------------------------------------------------------
+    // 1. LECTURE NON-BLOQUANTE (Downlink : Serveur -> Arduino)
+    // ---------------------------------------------------------
+    if (Serial.available() > 0) {
+        // Lecture jusqu'au retour à la ligne envoyé par le Java
+        String command = Serial.readStringUntil('\n');
+        command.trim(); // Nettoyage des espaces résiduels
+
+        if (command == "CMD:LED:ON") {
+            digitalWrite(LED_BUILTIN, HIGH);
+        } 
+        else if (command == "CMD:LED:OFF") {
+            digitalWrite(LED_BUILTIN, LOW);
+        }
+    }
+
+    // ---------------------------------------------------------
+    // 2. ENVOI DE LA TÉLÉMÉTRIE (Uplink : Arduino -> Serveur)
+    // ---------------------------------------------------------
     unsigned long currentMillis = millis();
 
     if (currentMillis - previousMillis >= interval) {
