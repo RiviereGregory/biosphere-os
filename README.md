@@ -482,4 +482,89 @@ Entrelacement réussi des requêtes HTTP synchrones et de la télémétrie async
 [...]
 2026-07-08T18:26:08.887 INFO [omcat-handler-1] : 🕹️ [API REST] Demande de modification d'état reçue : LED -> OFF
 2026-07-08T18:26:08.888 INFO [omcat-handler-1] : 📤 [Commande envoyée au matériel] -> CMD:LED:OFF
-2026-07-08T18:26:10.264 INFO [arduino-vthread] : 💾 [Sauvegarde BDD] -> Origine: USB | Temp: 24.5°C
+2026-07-08T18:26:10.264 INFO [arduino-vthread] : 💾 [Sauvegarde BDD] -> Origine: USB | Temp: 24.5°C  
+```
+
+
+## 📅 Journal de Bord — Étape 4.1 : Scaffolding Angular et Sécurité CORS
+
+Mise en place de la couche présentation (Frontend) via le framework Angular (v17+) configuré en mode Standalone Components, et résolution des politiques de sécurité inter-domaines.
+
+---
+
+### ⚙️ Déverrouillage Backend (Spring Boot)
+
+Les navigateurs web bloquent par défaut les requêtes XHR/Fetch provenant d'un port différent de celui du serveur (Politique *Same-Origin*). 
+Création d'une configuration globale `WebMvcConfigurer` pour autoriser le trafic entrant depuis le serveur de développement Angular :
+
+```java
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/**")
+                .allowedOrigins("http://localhost:4200")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedHeaders("*");
+    }
+}
+```  
+
+### Installer Node.js et l'Angular CLI (Sur Ubuntu)
+Le standard industriel pour installer Node.js sous Linux est d'utiliser nvm (Node Version Manager). 
+Cela évite tous les problèmes de permissions sudo avec les paquets globaux (npm -g).Ouvre ton terminal Ubuntu et exécute ces commandes une par une :
+
+1. Installer NVM  
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+```  
+
+2. Recharger le terminal (pour que la commande 'nvm' soit reconnue)
+```bash
+source ~/.bashrc
+```  
+
+3. Installer la version LTS actuelle de Node.js (ex: Node 20/22)
+```bash
+nvm install --lts
+```  
+
+4. Installer le CLI officiel Angular mondialement
+```bash
+npm install -g @angular/cli
+```  
+
+Vérification : Tape ng version. Tu devrais voir un gros logo Angular rouge en ASCII.  
+
+### Scaffolding du Projet Angular
+Place-toi à la racine de ton dépôt Git (là où tu as le dossier backend et firmware) et lance le générateur :
+
+On génère le squelette frontend (Angular CLI va tout configurer)  
+```bash
+ng new frontend
+```
+
+Le CLI va te poser quelques questions, réponds avec ces choix :  
+Which stylesheet format would you like to use? -> CSS (ou SCSS si tu es à l'aise).
+Do you want to enable Server-Side Rendering (SSR) and Static Site Generation (SSG/Prerendering)? -> N (Pour un dashboard de serre en réseau local, on veut une pure Single Page Application cliente).
+
+### L'Allumage du Moteur  
+Une fois que le CLI a terminé de télécharger les paquets node_modules (ça peut prendre une ou deux minutes), rentre dans le dossier et démarre le serveur de développement :
+```Bash
+cd frontend
+ng serve
+```  
+
+Le terminal va compiler l'application en mémoire.
+
+### 🛠️ Infrastructure Frontend & Résolution d'Anomalie Linux
+
+Anomalie rencontrée : Échec de la génération du projet (ng new) avec l'erreur EPERM: operation not permitted, symlink.  
+
+Diagnostic système : L'Angular CLI (via npm) nécessite la création de liens symboliques Unix pour l'arborescence node_modules/.bin. Le disque de travail initial étant formaté avec un système de fichiers non-natif (exFAT/NTFS), le noyau Linux a bloqué l'opération système.  
+
+Résolution : 
+1. Migration de l'espace de travail vers un disque monté en ext4 (/run/media/.../EXTGREG).
+2. Réattribution des droits de propriété stricts au niveau de l'OS (sudo chown -R $USER:$USER ...).
+3. Initialisation réussie de l'architecture Single Page Application (SPA).
+
