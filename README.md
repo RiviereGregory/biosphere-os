@@ -602,3 +602,36 @@ Adoption des standards modernes du framework (zéro `NgModule`) pour l'architect
 **Validation de la chaîne complète (Capteur -> BDD -> Navigateur) :**
 Appel du service dès l'initialisation du composant racine (`ngOnInit`). La console du navigateur (Outils de développement) confirme la réception et le parsing correct du payload JSON provenant de PostgreSQL :
 `✅ Données reçues de PostgreSQL : Array(15) [ Object { temperature: 19, humidity: 55, ... }, ... ]`
+
+## 📅 Journal de Bord — Étape 4.3 : Interface Réactive et Control Flow (Angular 17+)
+
+Création de l'interface utilisateur (UI) du tableau de bord exploitant les dernières évolutions du framework Angular pour un rendu fluide et temps réel sans rechargement.
+
+---
+
+### 🏗️ Architecture Réactive (TypeScript)
+
+Adoption des **Signals** (`signal<T>`) pour la gestion d'état locale du composant, remplaçant la mécanique traditionnelle de détection de changement (Zone.js).
+
+1.  **État Local :** Déclaration de `telemetryHistory` et `isPumpActive` sous forme de signaux réactifs.
+2.  **Mécanisme de Polling :** Mise en place d'une boucle `setInterval` interrogeant l'API REST toutes les 5000ms pour rafraîchir l'historique sans action utilisateur.
+3.  **Actionneur Bidirectionnel :** Câblage de la méthode `togglePump()` pour inverser l'état du signal et expédier la commande correspondante via le point d'entrée HTTP POST.
+
+---
+
+### 🎨 Rendu et Moteur de Template (HTML / CSS)
+
+Utilisation de la nouvelle syntaxe de flux de contrôle (Control Flow) native d'Angular 17, éliminant le besoin de directives structurelles lourdes :
+
+1.  **Rendu Conditionnel (`@if` / `@else`) :** Affichage asynchrone des cartes de valeurs (Température, Humidité, Sol) uniquement lorsque le signal contient des données.
+2.  **Boucle Hautes Performances (`@for` avec `track`) :** Itération sur la liste historique garantissant un rafraîchissement DOM optimisé (via la clé `record.id`).
+3.  **Design :** Implémentation d'une grille CSS (`display: grid`) et d'un style en "cartes" (Cards) pour une lisibilité optimale type tableau de bord industriel.
+
+---
+
+### 🧪 Validation Fonctionnelle (End-to-End UI)
+
+* **Lecture en continu :** L'interface met à jour ses valeurs visuelles toutes les 5 secondes de manière transparente.
+* **Contrôle Matériel :** Le clic sur le bouton web déclenche instantanément l'allumage/extinction de la LED sur la carte Arduino via la chaîne complète (Angular -> API Spring Boot -> Virtual Thread -> JNI Série -> C++).
+
+![bio sphère](Bio_sphereOS.png)
