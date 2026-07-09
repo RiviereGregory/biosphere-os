@@ -2,6 +2,7 @@ package com.biosphere.backend.controller;
 
 import com.biosphere.backend.domain.PlantTelemetry;
 import com.biosphere.backend.domain.TelemetryPayload;
+import com.biosphere.backend.service.SseNotificationService;
 import com.biosphere.backend.service.TelemetryIngestService;
 import com.biosphere.backend.domain.TelemetryEntity;
 import com.biosphere.backend.repository.TelemetryRepository;
@@ -10,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDateTime;
 
@@ -20,11 +22,13 @@ public class TelemetryController {
     private static final Logger log = LoggerFactory.getLogger(TelemetryController.class);
     private final TelemetryIngestService ingestService;
     private final TelemetryRepository repository;
+    private final SseNotificationService sseService;
 
     // Injection de notre service centralisé
-    public TelemetryController(TelemetryIngestService ingestService, TelemetryRepository repository) {
+    public TelemetryController(TelemetryIngestService ingestService, TelemetryRepository repository, SseNotificationService sseService) {
         this.ingestService = ingestService;
         this.repository = repository;
+        this.sseService = sseService;
     }
 
     @PostMapping("/telemetry")
@@ -44,5 +48,11 @@ public class TelemetryController {
     @GetMapping("/telemetry")
     public ResponseEntity<List<TelemetryEntity>> getTelemetryHistory() {
         return ResponseEntity.ok(repository.findTop15ByOrderByTimestampDesc());
+    }
+
+    // La route d'abonnement asynchrone
+    @GetMapping("/telemetry/stream")
+    public SseEmitter streamTelemetry() {
+        return sseService.subscribe();
     }
 }

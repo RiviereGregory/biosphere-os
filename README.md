@@ -632,6 +632,37 @@ Utilisation de la nouvelle syntaxe de flux de contrôle (Control Flow) native d'
 ### 🧪 Validation Fonctionnelle (End-to-End UI)
 
 * **Lecture en continu :** L'interface met à jour ses valeurs visuelles toutes les 5 secondes de manière transparente.
-* **Contrôle Matériel :** Le clic sur le bouton web déclenche instantanément l'allumage/extinction de la LED sur la carte Arduino via la chaîne complète (Angular -> API Spring Boot -> Virtual Thread -> JNI Série -> C++).
+* **Contrôle Matériel :** Le clic sur le bouton web déclenche instantanément l'allumage/extinction de la LED sur la carte Arduino via la chaîne complète (Angular -> API Spring Boot -> Virtual Thread -> JNI Série -> C++).  
 
-![bio sphère](Bio_sphereOS.png)
+![bio sphère](Bio_sphereOS.png)  
+
+## 📅 Journal de Bord — Étape 4.4 : Architecture Orientée Événements (Server-Sent Events)
+
+Migration du mécanisme de synchronisation Frontend/Backend : abandon du Polling (requêtes HTTP périodiques) au profit d'un flux continu unidirectionnel (Server-Sent Events).
+
+---
+
+### ⚙️ Évolution du Backend (Spring Boot)
+
+Création d'un service de diffusion pour notifier les clients à la milliseconde près de l'arrivée d'une nouvelle télémétrie :
+
+1.  **Service de Notification (`SseNotificationService`) :** * Gestion d'une liste *thread-safe* (`CopyOnWriteArrayList`) des navigateurs connectés (`SseEmitter`).
+    * Implémentation du nettoyage automatique lors de la déconnexion d'un client.
+2.  **Intégration au Pipeline d'Ingestion :** Injection du service SSE dans le `TelemetryIngestService` pour déclencher l'événement `telemetry-event` immédiatement après l'INSERT en base de données.
+3.  **Nouveau Point d'Entrée :** Ajout de la route `GET /api/telemetry/stream` permettant aux clients de s'abonner au flux.
+
+---
+
+### 🛠️ Évolution du Frontend (Angular 17+)
+
+Bascule vers une écoute passive et réactive, réduisant drastiquement la charge réseau :
+
+1.  **Client SSE (`EventSource`) :** Ouverture d'une connexion HTTP persistante avec le backend. Conversion du flux natif en un `Observable` Angular pour une intégration propre.
+2.  **Mise à jour Réactive :** Utilisation de la méthode `.update()` des Signals pour insérer dynamiquement la nouvelle donnée en tête de liste et tronquer l'historique aux 15 dernières valeurs, garantissant des performances O(1) sur la modification du DOM.
+
+---
+
+### 🧪 Validation (Performance & Temps Réel)
+
+* **Réduction de la charge réseau :** Une seule requête réseau `(pending)` au lieu d'une requête toutes les 5 secondes.
+* **Synchronisation Parfaite :** Si l'interface est ouverte sur plusieurs onglets ou machines, l'affichage se met à jour simultanément dès la réception d'une trame matérielle par le Virtual Thread Java.

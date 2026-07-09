@@ -14,10 +14,12 @@ public class TelemetryIngestService {
 
     private static final Logger log = LoggerFactory.getLogger(TelemetryIngestService.class);
     private final TelemetryRepository repository;
+    private final SseNotificationService sseService;
 
     // Injection de dépendance via le constructeur
-    public TelemetryIngestService(TelemetryRepository repository) {
+    public TelemetryIngestService(TelemetryRepository repository, SseNotificationService sseService) {
         this.repository = repository;
+        this.sseService = sseService;
     }
 
 
@@ -31,6 +33,8 @@ public class TelemetryIngestService {
                 telemetry.timestamp()
         );
         repository.save(entity);
+        // On pousse la nouvelle donnée vers les navigateurs !
+        sseService.dispatch(entity);
 
         log.info("💾 [Sauvegarde BDD] -> Origine: {} | Temp: {}°C", source, telemetry.temperature());
     }

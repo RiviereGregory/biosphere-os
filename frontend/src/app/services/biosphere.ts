@@ -33,4 +33,22 @@ export class BiosphereService {
       responseType: 'text' // Car Spring Boot renvoie une String brute, pas un JSON
     });
   }
+  // Flux continu de données PUSH
+  getStream(): Observable<Telemetry> {
+    return new Observable((observer) => {
+      // Ouvre une connexion HTTP persistante avec le backend
+      const eventSource = new EventSource(`${this.API_URL}/telemetry/stream`);
+      
+      // Écoute l'événement spécifique "telemetry-event" poussé par le Java
+      eventSource.addEventListener('telemetry-event', (event) => {
+        const data = JSON.parse(event.data);
+        observer.next(data);
+      });
+
+      eventSource.onerror = (error) => console.error('SSE Déconnecté', error);
+      
+      // Ferme la connexion si le composant est détruit
+      return () => eventSource.close();
+    });
+  }
 }

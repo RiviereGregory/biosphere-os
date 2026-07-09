@@ -17,9 +17,17 @@ export class AppComponent implements OnInit {
   isPumpActive = signal<boolean>(false);
 
   ngOnInit() {
+    // 1. On récupère les 15 dernières lignes pour remplir l'écran initialement
     this.refreshData();
-    // Polling : On interroge PostgreSQL toutes les 5 secondes
-    setInterval(() => this.refreshData(), 5000);
+
+    // 2. On SUPPRIME le setInterval et on s'abonne au flux temps réel
+    this.biosphereService.getStream().subscribe({
+      next: (newRecord) => {
+        // La puissance des Signals Angular : 
+        // On insère la nouvelle donnée en haut de la liste, et on coupe à 15 éléments
+        this.telemetryHistory.update(history => [newRecord, ...history].slice(0, 15));
+      }
+    });
   }
 
   refreshData() {
